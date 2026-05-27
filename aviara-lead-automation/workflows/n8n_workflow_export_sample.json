@@ -1,0 +1,400 @@
+{
+  "name": "Aviara Lead Automation - FastAPI Integration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aviara-lead-webhook",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -900,
+        120
+      ],
+      "notes": "Receives name, email, company, and message from a lead source."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.name}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.email}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.company}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.message}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        },
+        "combineOperation": "all"
+      },
+      "id": "2",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -680,
+        120
+      ],
+      "notes": "Rejects incomplete leads before calling backend services."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/api/enrich",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{$node['Webhook Trigger'].json.body.name}}"
+            },
+            {
+              "name": "email",
+              "value": "={{$node['Webhook Trigger'].json.body.email}}"
+            },
+            {
+              "name": "company",
+              "value": "={{$node['Webhook Trigger'].json.body.company}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "3",
+      "name": "HTTP Request: Call Enrichment API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -420,
+        0
+      ],
+      "notes": "Calls FastAPI /api/enrich. Replace localhost with ngrok URL when using n8n Cloud."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/api/classify",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{$node['Webhook Trigger'].json.body.message}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "4",
+      "name": "HTTP Request: Call Classification API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -160,
+        0
+      ],
+      "notes": "Calls FastAPI /api/classify and returns deterministic mock AI intent."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "email",
+              "value": "={{$node['Webhook Trigger'].json.body.email}}",
+              "type": "string"
+            },
+            {
+              "name": "name",
+              "value": "={{$node['Webhook Trigger'].json.body.name}}",
+              "type": "string"
+            },
+            {
+              "name": "company",
+              "value": "={{$node['Webhook Trigger'].json.body.company}}",
+              "type": "string"
+            },
+            {
+              "name": "message",
+              "value": "={{$node['Webhook Trigger'].json.body.message}}",
+              "type": "string"
+            },
+            {
+              "name": "linkedin_url",
+              "value": "={{$node['HTTP Request: Call Enrichment API'].json.linkedin_url}}",
+              "type": "string"
+            },
+            {
+              "name": "company_size",
+              "value": "={{$node['HTTP Request: Call Enrichment API'].json.company_size}}",
+              "type": "string"
+            },
+            {
+              "name": "industry",
+              "value": "={{$node['HTTP Request: Call Enrichment API'].json.industry}}",
+              "type": "string"
+            },
+            {
+              "name": "intent",
+              "value": "={{$node['HTTP Request: Call Classification API'].json.intent}}",
+              "type": "string"
+            },
+            {
+              "name": "confidence",
+              "value": "={{$node['HTTP Request: Call Classification API'].json.confidence}}",
+              "type": "number"
+            },
+            {
+              "name": "processed_at",
+              "value": "={{$now}}",
+              "type": "string"
+            },
+            {
+              "name": "idempotency_key",
+              "value": "={{$node['Webhook Trigger'].json.body.email}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5",
+      "name": "Prepare Storage Record",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        100,
+        0
+      ],
+      "notes": "This is the exact row payload to store. In production, replace or follow this node with Google Sheets/Airtable upsert by email."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "storage_target",
+              "value": "Google Sheets or Airtable",
+              "type": "string"
+            },
+            {
+              "name": "storage_action",
+              "value": "Upsert lead by email",
+              "type": "string"
+            },
+            {
+              "name": "stored_payload",
+              "value": "={{$json}}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6",
+      "name": "Google Sheets/Airtable Storage",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        360,
+        0
+      ],
+      "notes": "Placeholder for assignment export. Replace with Google Sheets Append/Update or Airtable Upsert node using email as unique key."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "notification_channel",
+              "value": "Slack or Email",
+              "type": "string"
+            },
+            {
+              "name": "notification_text",
+              "value": "=New lead processed: {{$json.stored_payload.name}} from {{$json.stored_payload.company}}. Intent: {{$json.stored_payload.intent}}.",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "name": "lead",
+              "value": "={{$json.stored_payload}}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7",
+      "name": "Slack/Email Notification",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        620,
+        0
+      ],
+      "notes": "Placeholder notification node. Replace with Slack, Gmail, SMTP, or webhook notification in a real environment."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "status",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "name": "message",
+              "value": "Missing required fields: name, email, company, or message.",
+              "type": "string"
+            },
+            {
+              "name": "failed_payload",
+              "value": "={{$json}}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8",
+      "name": "Error Handling Path",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -420,
+        260
+      ],
+      "notes": "Validation failure path. Production flows should log this and send an alert."
+    },
+    {
+      "parameters": {
+        "content": "Production notes:\\n1. n8n orchestrates only; FastAPI owns processing logic.\\n2. Use email as idempotency key for storage upsert.\\n3. Add retries on HTTP/storage/notification nodes.\\n4. For n8n Cloud, expose FastAPI using ngrok and replace localhost URLs.",
+        "height": 240,
+        "width": 360
+      },
+      "id": "9",
+      "name": "Workflow Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -260
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Call Enrichment API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Handling Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Call Enrichment API": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Call Classification API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Call Classification API": {
+      "main": [
+        [
+          {
+            "node": "Prepare Storage Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Storage Record": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets/Airtable Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets/Airtable Storage": {
+      "main": [
+        [
+          {
+            "node": "Slack/Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionId": "assignment-ready-sample",
+  "triggerCount": 1,
+  "tags": [
+    {
+      "name": "aviara-assignment"
+    }
+  ]
+}
